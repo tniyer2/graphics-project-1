@@ -1,8 +1,13 @@
 // Simple vector drawing program using WebGL.
 'use strict';
 
+const MAX_NUM_OF_VERTICES = 100000;
+
 // Global WebGL context variable
 let gl;
+
+let selectModeElm;
+let selectColorElm;
 
 
 // Once the document is fully loaded run this init function.
@@ -21,7 +26,8 @@ window.addEventListener('load', function init() {
     
     // Initialize the WebGL program, buffers, and events
     gl.program = initProgram();
-    initBuffers();
+
+    gl.objects = []
     initEvents();
 
     // Render the scene
@@ -81,17 +87,69 @@ function initProgram() {
  *   * For aColor, 100000 3-component floats
  * Both are setup for dynamic drawing.
  */
-function initBuffers() {
-	// TODO
+function createObject(mode) {
+    const object = {
+        mode: mode,
+        numPoints: 0
+    };
+
+    // Create and Bind VAO
+    object.VAO = gl.createVertexArray();
+    gl.bindVertexArray(object.VAO);
+
+    // Load the vertex coordinate data onto the GPU and associate with attribute
+    object.positionBuffer = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, object.positionBuffer);
+    gl.bufferData(gl.ARRAY_BUFFER, MAX_NUM_OF_VERTICES * 2 * Float32Array.BYTES_PER_ELEMENT, gl.DYNAMIC_DRAW);
+    gl.vertexAttribPointer(gl.program.aPosition, 2, gl.FLOAT, false, 0, 0);
+    gl.enableVertexAttribArray(gl.program.aPosition);
+
+    object.colorBuffer = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, object.colorBuffer);
+    gl.bufferData(gl.ARRAY_BUFFER, MAX_NUM_OF_VERTICES * 3 * Float32Array.BYTES_PER_ELEMENT, gl.DYNAMIC_DRAW);
+    gl.vertexAttribPointer(gl.program.aColor, 3, gl.FLOAT, false, 0, 0);
+    gl.enableVertexAttribArray(gl.program.aColor);
+
+    // TODO: Cleanup
+    gl.bindVertexArray(null);
+    gl.bindBuffer(gl.ARRAY_BUFFER, null);
+
+    return object;
 }
 
+function stringToColor(str) {
+    return Float32Array.of(
+        parseInt(str.substr(1, 2), 16) / 255.0,
+        parseInt(str.substr(3, 2), 16) / 255.0,
+        parseInt(str.substr(5, 2), 16) / 255.0,
+        1
+    );
+}
 
 /**
  * Initialize the event handlers and initialize any global variables based on the current values
  * in the HTML inputs.
  */
 function initEvents() {
-	// TODO
+    // Set the initial color
+    selectColorElm = document.getElementById("draw-color");
+    setColor(selectColorElm.value);
+    
+    // Set the initial draw mode
+    selectModeElm = document.getElementById("draw-mode");
+    setMode(selectModeElm.value);
+
+    gl.canvas.addEventListener('click', onClick);
+
+    // set the mode on the change event
+    selectModeElm.addEventListener('change', (e) => {
+        setMode(e.target.value);
+    });
+
+    // set the color on the input event
+    selectColorElm.addEventListener('input', (e) => {
+        setColor(e.target.value);
+    })
 }
 
 
@@ -100,7 +158,77 @@ function initEvents() {
  * mode and range of vertices.
  */
 function render() {
-	gl.clear(gl.COLOR_BUFFER_BIT);
-	
-	// TODO
+    gl.clear(gl.COLOR_BUFFER_BIT);
+
+    for (let i = 0; i < gl.objects.length; i++) {
+        const object = gl.objects[i];
+
+        gl.bindVertexArray(object.VAO);
+        gl.drawArrays(object.mode, 0, object.numPoints);
+    
+        // Cleanup
+        gl.bindVertexArray(null);
+    }
+}
+
+function getGLModeFromText(mode) {
+    const options = [
+        ['POINTS', gl.POINTS],
+        ['LINES', gl.LINES], ['LINE_STRIP', gl.LINE_STRIP], ['LINE_LOOP', gl.LINE_LOOP],
+        ['TRIANGLES', gl.TRIANGLES], ['TRIANGLE_STRIP', gl.TRIANGLE_STRIP], ['TRIANGLE_FAN', gl.TRIANGLE_FAN]
+    ];
+
+    const i = options.findIndex((o) => o[0] === mode);
+    if (i === -1) {
+        throw Error("\"" + mode + "\" is not a valid mode.");
+    } else {
+        return options[i][1];
+    }
+}
+
+function setMode(mode) {
+    const newObject = createObject(getGLModeFromText(mode));
+    gl.currentObject = newObject;
+    gl.objects.push(newObject);
+}
+
+function setColor(color) {
+    if (false/*TODO: should check for invalid color*/) {
+        throw Error("Invalid Color.");
+    } else {
+        gl.currentColor = stringToColor(color);
+    }
+}
+
+function onClick(event) {
+    let x = event.offsetX;
+    let y = event.offsetY;
+    let w = this.offsetWidth;
+    let h = this.offsetHeight;
+
+    // Convert coordinates
+    x = (x / (w/2)) - 1;
+    y = (-y / (h/2)) + 1;
+
+    let newPoint = [x, y];
+
+    // Bind the current VAO
+    gl.bindVertexArray(gl.currentObject.VAO);
+
+    // Add the new point to the current position buffer
+    gl.bindBuffer(gl.ARRAY_BUFFER, gl.currentObject.positionBuffer);
+    gl.bufferSubData(gl.ARRAY_BUFFER, gl.currentObject.numPoints * 2 * Float32Array.BYTES_PER_ELEMENT, Float32Array.from(newPoint));
+
+    // Add the current color to the current color buffer
+    gl.bindBuffer(gl.ARRAY_BUFFER, gl.currentObject.colorBuffer);
+    gl.bufferSubData(gl.ARRAY_BUFFER,  gl.currentObject.numPoints * 3 * Float32Array.BYTES_PER_ELEMENT, Float32Array.from(gl.currentColor));
+
+    // Cleanup
+    gl.bindVertexArray(null);
+    gl.bindBuffer(gl.ARRAY_BUFFER, null);
+
+    gl.currentObject.numPoints += 1;
+
+    // Render the updated scene
+    render();
 }
