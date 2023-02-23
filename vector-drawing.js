@@ -6,8 +6,8 @@ const MAX_NUM_OF_VERTICES = 100000;
 // Global WebGL context variable
 let gl;
 
-let selectModeElm;
-let selectColorElm;
+let selectModeElm; // the select element for setting the mode
+let selectColorElm; // the input element for setting the color
 
 
 // Once the document is fully loaded run this init function.
@@ -27,7 +27,7 @@ window.addEventListener('load', function init() {
     // Initialize the WebGL program, buffers, and events
     gl.program = initProgram();
 
-    gl.objects = []
+    gl.objects = [] // create an array to store all created objects
     initEvents();
 
     // Render the scene
@@ -85,6 +85,7 @@ function initProgram() {
  * Initialize the data buffers. This allocates a vertex array containing two array buffers:
  *   * For aPosition, 100000 2-component floats
  *   * For aColor, 100000 3-component floats
+ * An object storing the mode, number of points, and the references to the buffers is returned.
  * Both are setup for dynamic drawing.
  */
 function createObject(mode) {
@@ -104,6 +105,7 @@ function createObject(mode) {
     gl.vertexAttribPointer(gl.program.aPosition, 2, gl.FLOAT, false, 0, 0);
     gl.enableVertexAttribArray(gl.program.aPosition);
 
+    // Load the color data onto the GPU and associate with attribute
     object.colorBuffer = gl.createBuffer();
     gl.bindBuffer(gl.ARRAY_BUFFER, object.colorBuffer);
     gl.bufferData(gl.ARRAY_BUFFER, MAX_NUM_OF_VERTICES * 3 * Float32Array.BYTES_PER_ELEMENT, gl.DYNAMIC_DRAW);
@@ -160,17 +162,22 @@ function initEvents() {
 function render() {
     gl.clear(gl.COLOR_BUFFER_BIT);
 
+    // renders each object in gl.objects
     for (let i = 0; i < gl.objects.length; i++) {
         const object = gl.objects[i];
 
         gl.bindVertexArray(object.VAO);
-        gl.drawArrays(object.mode, 0, object.numPoints);
+        gl.drawArrays(object.mode, 0, object.numPoints); // draw mode based on object.mode
     
         // Cleanup
         gl.bindVertexArray(null);
     }
 }
 
+/*
+Takes in a valid mode and returns its associated GLEnum.
+Throws and error if the mode entered is not a valid option.
+*/
 function getGLModeFromText(mode) {
     const options = [
         ['POINTS', gl.POINTS],
@@ -186,27 +193,36 @@ function getGLModeFromText(mode) {
     }
 }
 
+/*
+Creates a new object for the mode given and
+sets the current active object to it.
+*/
 function setMode(mode) {
     const newObject = createObject(getGLModeFromText(mode));
     gl.currentObject = newObject;
     gl.objects.push(newObject);
 }
 
+/*
+Parses the given color and sets the current
+color value to it.
+*/
 function setColor(color) {
-    if (false/*TODO: should check for invalid color*/) {
-        throw Error("Invalid Color.");
-    } else {
-        gl.currentColor = stringToColor(color);
-    }
+    gl.currentColor = stringToColor(color);
 }
 
+/*
+Adds a new vertex onto the current object based on the point that
+was clicked and the current color. calculates the newPoints by converting
+from screen space. finally re-renders.
+ */
 function onClick(event) {
     let x = event.offsetX;
     let y = event.offsetY;
     let w = this.offsetWidth;
     let h = this.offsetHeight;
 
-    // Convert coordinates
+    // Convert coordinates from screen space
     x = (x / (w/2)) - 1;
     y = (-y / (h/2)) + 1;
 
